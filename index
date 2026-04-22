@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>grammar battle: verb edition</title>
+    <style>
+        :root {
+            --team-red: #ff6b6b;
+            --team-blue: #4ecdc4;
+            --bg-color: #f7f9fc;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial Rounded MT Bold', 'Helvetica', sans-serif;
+            background-color: var(--bg-color);
+            overflow: hidden;
+            display: flex;
+            height: 100vh;
+            touch-action: manipulation;
+        }
+
+        /* Split Screen Layout */
+        .side {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            transition: background 0.3s;
+            position: relative;
+        }
+
+        #left-side { border-right: 4px dashed white; background: #fff5f5; }
+        #right-side { background: #f0ffff; }
+
+        /* Score & Stars */
+        .header {
+            position: absolute;
+            top: 20px;
+            text-align: center;
+        }
+
+        .team-name { font-size: 1.5rem; margin-bottom: 5px; text-transform: lowercase; }
+        #left-side .team-name { color: var(--team-red); }
+        #right-side .team-name { color: var(--team-blue); }
+
+        .star-container { font-size: 1.2rem; min-height: 30px; }
+
+        /* Central Question Zone */
+        #question-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            z-index: 10;
+            border: 6px solid #ffd166;
+        }
+
+        .sentence { font-size: 1.4rem; color: #333; line-height: 1.4; }
+        .blank { color: #ff9f43; font-weight: bold; text-decoration: underline; }
+
+        /* Buttons */
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            width: 100%;
+            max-width: 250px;
+            margin-top: 100px;
+        }
+
+        .btn {
+            aspect-ratio: 1;
+            border: none;
+            border-radius: 15px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 6px 0 rgba(0,0,0,0.1);
+            transition: transform 0.1s, opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+        }
+
+        #left-side .btn { background-color: var(--team-red); }
+        #right-side .btn { background-color: var(--team-blue); }
+
+        .btn:active { transform: translateY(4px); box-shadow: none; }
+        .btn.wrong { opacity: 0.3; pointer-events: none; }
+
+        /* Win Modal */
+        #win-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.9);
+            z-index: 100;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        button.reset-btn {
+            margin-top: 20px;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            background: #ffd166;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div id="left-side" class="side">
+    <div class="header">
+        <div class="team-name">team red</div>
+        <div id="stars-left" class="star-container"></div>
+    </div>
+    <div class="options-grid" id="options-left"></div>
+</div>
+
+<div id="question-overlay">
+    <div class="sentence" id="display-sentence">loading...</div>
+</div>
+
+<div id="right-side" class="side">
+    <div class="header">
+        <div class="team-name">team blue</div>
+        <div id="stars-right" class="star-container"></div>
+    </div>
+    <div class="options-grid" id="options-right"></div>
+</div>
+
+<div id="win-modal">
+    <h1 id="win-text" style="font-size: 3rem;">team red wins!</h1>
+    <p style="font-size: 5rem;">🏆</p>
+    <button class="reset-btn" onclick="location.reload()">play again</button>
+</div>
+
+<script>
+    const quizData = [
+        { s: "We ____ lunch at the school canteen.", a: "eat", o: ["play", "sing", "eat", "jump"] },
+        { s: "Birds ____ in the blue sky.", a: "fly", o: ["fly", "swim", "read", "cook"] },
+        { s: "I ____ my teeth every morning.", a: "brush", o: ["brush", "sleep", "climb", "draw"] },
+        { s: "The students ____ to their teacher.", a: "listen", o: ["run", "listen", "dance", "bark"] },
+        { s: "My mom ____ delicious food for us.", a: "cooks", o: ["cooks", "cries", "flies", "jumps"] },
+        { s: "The cat ____ on the soft mat.", a: "sleeps", o: ["sleeps", "talks", "writes", "sings"] },
+        { s: "Please ____ your name on the paper.", a: "write", o: ["drink", "write", "kick", "hop"] },
+        { s: "We ____ to the park on Sundays.", a: "go", o: ["go", "eat", "sleep", "fly"] },
+        { s: "Fish ____ in the deep ocean.", a: "swim", o: ["run", "swim", "walk", "climb"] },
+        { s: "I ____ a storybook before bed.", a: "read", o: ["read", "jump", "cook", "brush"] }
+    ];
+
+    let currentQuestion = {};
+    let scores = { left: 0, right: 0 };
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playSound(freq, type = 'sine') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    }
+
+    function loadQuestion() {
+        currentQuestion = quizData[Math.floor(Math.random() * quizData.length)];
+        document.getElementById('display-sentence').innerHTML = currentQuestion.s.replace('____', '<span class="blank">____</span>');
+        
+        renderButtons('options-left', 'left');
+        renderButtons('options-right', 'right');
+    }
+
+    function renderButtons(containerId, side) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        
+        // Shuffle options for variety
+        const shuffled = [...currentQuestion.o].sort(() => Math.random() - 0.5);
+        
+        shuffled.forEach(option => {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.textContent = option;
+            btn.onclick = () => handleAnswer(option, side, btn);
+            container.appendChild(btn);
+        });
+    }
+
+    function handleAnswer(choice, side, btnElement) {
+        if (choice === currentQuestion.a) {
+            // Correct!
+            playSound(800);
+            scores[side]++;
+            updateStars();
+            
+            if (scores[side] >= 10) {
+                showWin(side);
+            } else {
+                // Flash the winning side green briefly
+                document.getElementById(`${side}-side`).style.background = '#d4edda';
+                setTimeout(() => {
+                    document.getElementById(`${side}-side`).style.background = (side === 'left') ? '#fff5f5' : '#f0ffff';
+                    loadQuestion();
+                }, 500);
+            }
+        } else {
+            // Wrong!
+            playSound(150, 'sawtooth');
+            btnElement.classList.add('wrong');
+        }
+    }
+
+    function updateStars() {
+        document.getElementById('stars-left').textContent = '⭐'.repeat(scores.left);
+        document.getElementById('stars-right').textContent = '⭐'.repeat(scores.right);
+    }
+
+    function showWin(side) {
+        const modal = document.getElementById('win-modal');
+        const text = document.getElementById('win-text');
+        modal.style.display = 'flex';
+        text.textContent = (side === 'left') ? 'team red wins!' : 'team blue wins!';
+        text.style.color = (side === 'left') ? 'var(--team-red)' : 'var(--team-blue)';
+    }
+
+    // Start
+    loadQuestion();
+</script>
+
+</body>
+</html>
