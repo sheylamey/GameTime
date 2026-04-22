@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cvc word battle</title>
+    <style>
+        :root {
+            --team1: #ff5252;
+            --team2: #448aff;
+            --bg: #f5f5f5;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            background-color: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        /* scoreboard */
+        .scoreboard {
+            display: flex;
+            width: 100%;
+            justify-content: space-around;
+            padding: 20px 0;
+            background: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .team-box {
+            text-align: center;
+            padding: 10px 20px;
+            border-radius: 15px;
+            width: 120px;
+            transition: transform 0.3s;
+        }
+
+        .team-box.active {
+            transform: scale(1.1);
+            border: 4px solid #ffd700;
+        }
+
+        #t1-box { background: #ffebee; border-bottom: 5px solid var(--team1); }
+        #t2-box { background: #e3f2fd; border-bottom: 5px solid var(--team2); }
+
+        .stars { font-size: 1.5rem; color: #ffca28; }
+
+        /* game arena */
+        .game-container {
+            margin-top: 30px;
+            background: white;
+            padding: 30px;
+            border-radius: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 90%;
+            max-width: 500px;
+        }
+
+        #clue-image {
+            width: 150px;
+            height: 150px;
+            margin-bottom: 20px;
+        }
+
+        .word-display {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .letter-slot {
+            width: 60px;
+            height: 70px;
+            border-bottom: 5px solid #ccc;
+            font-size: 3rem;
+            text-transform: lowercase;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* keyboard */
+        .keyboard {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+        }
+
+        .key {
+            padding: 15px 5px;
+            background: #eee;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            border: none;
+            box-shadow: 0 3px 0 #ccc;
+        }
+
+        .key:active { transform: translateY(3px); box-shadow: none; }
+
+        .turn-indicator {
+            margin-top: 15px;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        #win-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.95);
+            z-index: 100;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="scoreboard">
+    <div id="t1-box" class="team-box active">
+        <div>team 1</div>
+        <div id="t1-stars" class="stars"></div>
+    </div>
+    <div id="t2-box" class="team-box">
+        <div>team 2</div>
+        <div id="t2-stars" class="stars"></div>
+    </div>
+</div>
+
+<div id="turn-msg" class="turn-indicator" style="background: var(--team1); color: white;">
+    team 1: your turn!
+</div>
+
+<div class="game-container">
+    <div id="clue-image">
+        </div>
+
+    <div class="word-display" id="word-slots"></div>
+
+    <div class="keyboard" id="keyboard"></div>
+</div>
+
+<div id="win-overlay">
+    <h1 id="winner-text">team 1 wins!</h1>
+    <button onclick="location.reload()" style="padding: 15px 30px; font-size: 1.2rem; cursor:pointer;">play again</button>
+</div>
+
+<script>
+    const cvcWords = [
+        { word: 'cat', svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="55" r="35" fill="#f9a825"/><circle cx="35" cy="45" r="5"/><circle cx="65" cy="45" r="5"/><path d="M40 70 Q50 80 60 70" stroke="black" fill="none" stroke-width="2"/><path d="M20 30 L35 45 L15 50 Z" fill="#f9a825"/><path d="M80 30 L65 45 L85 50 Z" fill="#f9a825"/></svg>' },
+        { word: 'sun', svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="30" fill="#fdd835"/><g stroke="#fdd835" stroke-width="4"><line x1="50" y1="10" x2="50" y2="20"/><line x1="50" y1="80" x2="50" y2="90"/><line x1="10" y1="50" x2="20" y2="50"/><line x1="80" y1="50" x2="90" y2="50"/></g></svg>' },
+        { word: 'dog', svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="55" r="35" fill="#8d6e63"/><circle cx="35" cy="45" r="4" fill="black"/><circle cx="65" cy="45" r="4" fill="black"/><path d="M15 30 Q10 50 25 60 Z" fill="#5d4037"/><path d="M85 30 Q90 50 75 60 Z" fill="#5d4037"/></svg>' },
+        { word: 'bus', svg: '<svg viewBox="0 0 100 100"><rect x="10" y="30" width="80" height="40" rx="5" fill="#fbc02d"/><rect x="15" y="35" width="20" height="15" fill="#81d4fa"/><rect x="40" y="35" width="20" height="15" fill="#81d4fa"/><circle cx="25" y="75" r="8"/><circle cx="75" y="75" r="8"/></svg>' },
+        { word: 'pig', svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="55" r="35" fill="#f48fb1"/><circle cx="50" cy="60" r="12" fill="#f06292"/><circle cx="46" cy="60" r="2"/><circle cx="54" cy="60" r="2"/><circle cx="35" cy="45" r="4"/><circle cx="65" cy="45" r="4"/></svg>' }
+    ];
+
+    let currentWord = {};
+    let guessedLetters = [];
+    let scores = { t1: 0, t2: 0 };
+    let activeTeam = 1;
+    const audio = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playTone(f, type = 'sine') {
+        const osc = audio.createOscillator();
+        const gain = audio.createGain();
+        osc.frequency.value = f;
+        osc.type = type;
+        osc.connect(gain);
+        gain.connect(audio.destination);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.5);
+        osc.stop(audio.currentTime + 0.5);
+    }
+
+    function initGame() {
+        // Create keyboard
+        const alphabet = 'abcdefghijklmnopqrstuvwxyz'.split('');
+        const kb = document.getElementById('keyboard');
+        alphabet.forEach(letter => {
+            const btn = document.createElement('button');
+            btn.className = 'key';
+            btn.textContent = letter;
+            btn.onclick = () => handleGuess(letter);
+            kb.appendChild(btn);
+        });
+        nextRound();
+    }
+
+    function nextRound() {
+        currentWord = cvcWords[Math.floor(Math.random() * cvcWords.length)];
+        guessedLetters = [];
+        document.getElementById('clue-image').innerHTML = currentWord.svg;
+        renderWord();
+    }
+
+    function renderWord() {
+        const container = document.getElementById('word-slots');
+        container.innerHTML = '';
+        currentWord.word.split('').forEach(char => {
+            const slot = document.createElement('div');
+            slot.className = 'letter-slot';
+            slot.textContent = guessedLetters.includes(char) ? char : '';
+            container.appendChild(slot);
+        });
+    }
+
+    function handleGuess(letter) {
+        if (currentWord.word.includes(letter) && !guessedLetters.includes(letter)) {
+            guessedLetters.push(letter);
+            playTone(600);
+            renderWord();
+            
+            // Check if word complete
+            const isComplete = currentWord.word.split('').every(l => guessedLetters.includes(l));
+            if (isComplete) {
+                scores[`t${activeTeam}`]++;
+                updateScoreboard();
+                if (scores[`t${activeTeam}`] >= 10) {
+                    showWin();
+                } else {
+                    setTimeout(nextRound, 1000);
+                }
+            }
+        } else {
+            playTone(150, 'sawtooth');
+            switchTurn();
+        }
+    }
+
+    function switchTurn() {
+        activeTeam = activeTeam === 1 ? 2 : 1;
+        document.getElementById('t1-box').classList.toggle('active');
+        document.getElementById('t2-box').classList.toggle('active');
+        const msg = document.getElementById('turn-msg');
+        msg.textContent = `team ${activeTeam}: your turn!`;
+        msg.style.background = activeTeam === 1 ? 'var(--team1)' : 'var(--team2)';
+    }
+
+    function updateScoreboard() {
+        ['t1', 't2'].forEach(t => {
+            const starContainer = document.getElementById(`${t}-stars`);
+            starContainer.textContent = '⭐'.repeat(scores[t]);
+        });
+    }
+
+    function showWin() {
+        document.getElementById('win-overlay').style.display = 'flex';
+        document.getElementById('winner-text').textContent = `team ${activeTeam} wins! 🏆`;
+        document.getElementById('winner-text').style.color = activeTeam === 1 ? 'var(--team1)' : 'var(--team2)';
+    }
+
+    initGame();
+</script>
+</body>
+</html>
